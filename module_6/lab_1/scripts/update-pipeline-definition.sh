@@ -18,6 +18,13 @@ function check_necessary_properties {
     exit 1
   fi
 
+  # Check version property
+  local version_result=$(jq '."pipeline"?."version"' "$PIPELINE_JSON")
+  if [ "$version_result" == "null" ]; then
+    echo "Version property is missing in the JSON definition file."
+    exit 1
+  fi
+
   # Check Source properties
   local source_props=("Branch" "Owner" "PollForSourceChanges" "Repo")
   for prop in "${source_props[@]}"; do
@@ -51,40 +58,50 @@ function process_pipeline_base {
 # Process Source properties
 function process_source_properties {
   local base_json="$1"
-  local source_json=$(jq --arg OWNER "$OWNER" --arg BRANCH "$BRANCH" --arg POLL_FOR_SOURCE_CHANGES "$POLL_FOR_SOURCE_CHANGES" --arg REPO "$REPO" '
-    ."pipeline"."stages" |= (
-      map(if .name == "Source" then
-        .actions |= map(
-          if .name == "Source" then
-            .configuration.Branch = $BRANCH
-          | .configuration.Owner = $OWNER
-          | .configuration.PollForSourceChanges = $POLL_FOR_SOURCE_CHANGES
-          | .configuration.Repo = $REPO
-          else . end
-        )
-      else . end))
-    ' <<< "$base_json")
-  echo "$source_json"
+  local updated_json="$base_json"
+  if [ ! -z "$OWNER" ]; then
+    updated_json=$(jq --arg OWNER "$OWNER" '."pipeline"."stages" |= (map(if .name == "Source" then .actions |= (map(if .name == "Source" then .configuration.Owner = $OWNER else . end)) else . end))' <<< "$base_json")
+  fi
+  if [ ! -z "$BRANCH" ]; then
+    updated_json=$(jq --arg BRANCH "$BRANCH" '."pipeline"."stages" |= (map(if .name == "Source" then .actions |= (map(if .name == "Source" then .configuration.Branch = $BRANCH else . end)) else . end))' <<< "$updated_json")
+  fi
+  if [ ! -z "$POLL_FOR_SOURCE_CHANGES" ]; then
+    updated_json=$(jq --arg POLL_FOR_SOURCE_CHANGES "$POLL_FOR_SOURCE_CHANGES" '."pipeline"."stages" |= (map(if .name == "Source" then .actions |= (map(if .name == "Source" then .configuration.PollForSourceChanges = $POLL_FOR_SOURCE_CHANGES else . end)) else . end))' <<< "$updated_json")
+  fi
+  if [ ! -z "$REPO" ]; then
+    updated_json=$(jq --arg REPO "$REPO" '."pipeline"."stages" |= (map(if .name == "Source" then .actions |= (map(if .name == "Source" then .configuration.Repo = $REPO else . end)) else . end))' <<< "$updated_json")
+  fi
+  echo "$updated_json"
 }
 
 # Process EnvironmentVariables properties
 function process_environment_variables {
   local base_json="$1"
-  local env_json=$(jq --arg CONFIGURATION "$CONFIGURATION" '
-    ."pipeline"."stages" |= (
-      map(if .name == "QualityGate" or .name == "Build" then
-        .actions |= map(
-          .configuration.EnvironmentVariables = (
-            (.configuration.EnvironmentVariables | fromjson)
-            | map(if .name == "BUILD_CONFIGURATION" then .value = $CONFIGURATION else . end)
-            | tojson
-          ))
-      else . end))
-    ' <<< "$base_json")
-  echo "$env_json"
+  if [ ! -z "$CONFIGURATION" ]; then
+    local env_json=$(jq --arg CONFIGURATION "$CONFIGURATION" '
+      ."pipeline"."stages" |= (
+        map(if .name == "QualityGate" or .name == "Build" then
+          .actions |= map(
+            .configuration.EnvironmentVariables = (
+              (.configuration.EnvironmentVariables | fromjson)
+              | map(if .name == "BUILD_CONFIGURATION" then .value = $CONFIGURATION else . end)
+              | tojson
+            ))
+        else . end))
+      ' <<< "$base_json")
+    echo "$env_json"
+  else
+    echo "$base_json"
+  fi
 }
 
-# Parse input arguments
+## Parse input arguments
+should_apply_defaults=false
+if [ -n "$1" ] && [ "${1:0:2}" != "--" ]; then
+    PIPELINE_JSON="$1"
+    shift
+fi
+
 while [[ "$#" -gt 0 ]]; do
   case $1 in
     --owner) OWNER="$2"; shift ;;
@@ -97,15 +114,18 @@ while [[ "$#" -gt 0 ]]; do
       exit 0
       ;;
     *)
-      if [ -z "$PIPELINE_JSON" ]; then
-        PIPELINE_JSON="$1"
-      else
-        echo "Unrecognized option: $1"
-        exit 1
-      fi
+      echo "Unrecognized option: $1"
+      exit 1
   esac
+  should_apply_defaults=true
   shift
 done
+
+# Default values
+if [ "$should_apply_defaults" = "true" ]; then
+  BRANCH=${BRANCH:-main}
+  POLL_FOR_SOURCE_CHANGES=${POLL_FOR_SOURCE_CHANGES:-false}
+fi
 
 # Check if pipeline definition JSON path to file is provided
 if [ ! -f "$PIPELINE_JSON" ]; then
@@ -117,14 +137,10 @@ check_necessary_properties
 
 NEW_PIPELINE_JSON=$(process_pipeline_base)
 
-if [ ! -z "$OWNER" ] || [ ! -z "$BRANCH" ] || [ ! -z "$POLL_FOR_SOURCE_CHANGES" ] || [ ! -z "$REPO" ]; then
-  NEW_PIPELINE_JSON=$(process_source_properties "$NEW_PIPELINE_JSON")
-fi
+NEW_PIPELINE_JSON=$(process_source_properties "$NEW_PIPELINE_JSON")
 
-if [ ! -z "$CONFIGURATION" ]; then
-  NEW_PIPELINE_JSON=$(process_environment_variables "$NEW_PIPELINE_JSON")
-fi
+NEW_PIPELINE_JSON=$(process_environment_variables "$NEW_PIPELINE_JSON")
 
 # Save new pipeline definition
 DATE_OF_CREATION=$(date +%Y-%m-%d_%H-%M-%S)
-echo "$NEW_PIPELINE_JSON" >"pipeline-${DATE_OF_CREATION}.json"
+echo "$NEW_PIPELINE_JSON" > "pipeline-${DATE_OF_CREATION}.json"
