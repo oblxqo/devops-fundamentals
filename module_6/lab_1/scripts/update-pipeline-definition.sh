@@ -12,16 +12,16 @@ fi
 # Check if necessary properties exist
 function check_necessary_properties {
   # Check metadata property
-  local metadata_result=$(jq '."metadata"?."pipelineArn"' "$PIPELINE_JSON")
+  local metadata_result=$(jq '."metadata"' "$PIPELINE_JSON")
   if [ "$metadata_result" == "null" ]; then
-    echo "Metadata property is missing in the JSON definition file."
+    echo "metadata property is missing in the JSON definition file."
     exit 1
   fi
 
   # Check version property
   local version_result=$(jq '."pipeline"?."version"' "$PIPELINE_JSON")
   if [ "$version_result" == "null" ]; then
-    echo "Version property is missing in the JSON definition file."
+    echo "version property is missing in the JSON definition file."
     exit 1
   fi
 
