@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  dev:
+    container_name: devops-nestjs-app-dev
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: development
+    command: npm run start:dev
+    ports:
+      - '3001:3000'
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
