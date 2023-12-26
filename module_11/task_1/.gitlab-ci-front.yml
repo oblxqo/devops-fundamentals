@@ -1,0 +1,30 @@
+stages:
+  - test
+  - build
+  - deploy
+
+unit_test:
+  stage: test
+  script: echo "Running unit tests"
+  parallel: 2
+
+eslint_check:
+  stage: test
+  script: echo "Running eslint check"
+  parallel: 2
+
+npm_audit:
+  stage: test
+  script: echo "Running npm packages audit"
+  parallel: 2
+
+docker_build:
+  stage: build
+  script: echo "Building Docker Image and pushing to Registry"
+
+deploy:
+  stage: deploy
+  script: echo "Deploying the app"
+  only:
+    - main
+    - develop
