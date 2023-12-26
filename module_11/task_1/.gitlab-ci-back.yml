@@ -1,0 +1,27 @@
+stages:
+  - test
+  - build
+  - deploy
+
+unit_test:
+  stage: test
+  script: echo "Running unit tests"
+
+eslint_check:
+  stage: test
+  script: echo "Running eslint check"
+
+npm_audit:
+  stage: test
+  script: echo "Running npm packages audit"
+
+build:
+  stage: build
+  script: echo "Building the app"
+
+deploy:
+  stage: deploy
+  script: echo "Deploying the app"
+  only:
+    - main
+    - develop
