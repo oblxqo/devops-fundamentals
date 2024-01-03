@@ -1,0 +1,95 @@
+stages:
+  - dependencies
+  - test
+  - build
+  - deploy
+
+variables:
+  DOCKER_REGISTRY: nadoni/devops-nestjs-app
+
+install_dependencies:
+  image: node:16-alpine
+  stage: dependencies
+  script:
+    - npm ci
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules
+
+unit_test:
+  image: node:16-alpine
+  stage: test
+  script:
+    - npm run test
+  artifacts:
+    paths:
+      - coverage/
+  parallel: 2
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules
+    policy: pull
+
+eslint_check:
+  image: node:16-alpine
+  stage: test
+  script:
+    - npm run lint
+  parallel: 2
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules
+    policy: pull
+
+npm_audit:
+  image: node:16-alpine
+  stage: test
+  script:
+    - npm audit
+  parallel: 2
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules
+    policy: pull
+
+build:
+  image: node:16-alpine
+  stage: build
+  script:
+    - npm run build
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules
+    policy: pull
+
+docker_build:
+  stage: build
+  script:
+    - echo "Building Docker Image and pushing to Registry"
+#    - docker build -t ${DOCKER_REGISTRY} .
+#    - docker login -u $CR_USER -p $CR_PWD
+#    - docker tag ${DOCKER_REGISTRY}:latest ${DOCKER_REGISTRY}:$CI_COMMIT_SHA
+#    - docker push ${DOCKER_REGISTRY}:latest
+#    - docker push ${DOCKER_REGISTRY}:$CI_COMMIT_SHA
+
+deploy:
+  stage: deploy
+  script: echo "Deploying the app"
+  only:
+    - main
+    - develop
